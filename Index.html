@@ -1,0 +1,204 @@
+html
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Plánovač ELITE</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3b82f6">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
+        
+        :root { --bg: #0f172a; --card: rgba(255, 255, 255, 0.05); --text: #f8fafc; }
+        .light-mode { --bg: #f1f5f9; --card: rgba(255, 255, 255, 0.8); --text: #1e293b; }
+
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: var(--bg); 
+            color: var(--text);
+            transition: background-color 0.4s ease;
+        }
+
+        .glass { background: var(--card); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        .day-card.active { background: #3b82f6 !important; transform: translateY(-5px); color: white !important; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .active-cat { border-color: white !important; transform: scale(1.1); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Horní lišta: Statistiky a Nastavení -->
+    <header class="p-6 sticky top-0 z-30 bg-opacity-80 backdrop-blur-md">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 id="month-display" class="text-xl font-extrabold opacity-90 uppercase tracking-tighter">Načítání...</h1>
+                <div class="flex gap-4 text-xs mt-1">
+                    <span class="text-amber-400 font-bold">🔥 <span id="streak-val">0</span> DNÍ</span>
+                    <span class="text-blue-400 font-bold">⭐ <span id="xp-val">0</span> XP</span>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="toggleTheme()" class="p-2 glass rounded-xl shadow-sm">🌓</button>
+                <button onclick="goToToday()" class="px-4 py-2 glass rounded-xl font-bold text-xs uppercase tracking-widest shadow-sm">Dnes</button>
+            </div>
+        </div>
+        <div id="calendar-strip" class="flex gap-3 overflow-x-auto pb-2 hide-scrollbar"></div>
+    </header>
+
+    <!-- Hlavní obsah -->
+    <main class="flex-grow px-6 pb-44">
+        <ul id="task-list" class="space-y-4"></ul>
+    </main>
+
+    <!-- Panel pro přidávání úkolů -->
+    <div class="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)] to-transparent z-40">
+        <div class="max-w-2xl mx-auto glass p-5 rounded-[2.5rem] shadow-2xl border-t border-white/20">
+            <input type="text" id="task-input" placeholder="Co dnes dokážete?" class="bg-transparent w-full px-4 py-2 focus:outline-none text-lg placeholder-slate-500 mb-2">
+            
+            <div class="flex justify-between items-center pt-4 border-t border-white/10">
+                <div class="flex gap-3" id="category-selector">
+                    <button onclick="setCat('blue')" class="w-8 h-8 rounded-full bg-blue-500 border-2 border-transparent transition-all" id="cat-blue"></button>
+                    <button onclick="setCat('emerald')" class="w-8 h-8 rounded-full bg-emerald-500 border-2 border-transparent transition-all" id="cat-emerald"></button>
+                    <button onclick="setCat('rose')" class="w-8 h-8 rounded-full bg-rose-500 border-2 border-transparent transition-all" id="cat-rose"></button>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <input type="time" id="task-time" class="bg-transparent text-xs font-bold opacity-70 outline-none border-b border-white/10 pb-1">
+                    <button onclick="addTask()" class="bg-blue-600 hover:bg-blue-500 p-4 rounded-2xl shadow-xl shadow-blue-500/30 transition-transform active:scale-95">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PWA Registrace
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log(err));
+        }
+
+        let selectedDate = new Date(); selectedDate.setHours(0,0,0,0);
+        let currentCat = 'blue';
+        let userData = JSON.parse(localStorage.getItem('user_stats')) || { xp: 0, streak: 0, lastDone: null };
+        let allTasks = JSON.parse(localStorage.getItem('tasks_v2')) || {};
+
+        function toggleTheme() { document.body.classList.toggle('light-mode'); }
+        
+        function setCat(color) {
+            currentCat = color;
+            document.querySelectorAll('#category-selector button').forEach(b => b.classList.remove('active-cat'));
+            document.getElementById('cat-' + color).classList.add('active-cat');
+        }
+
+        function generateCalendar() {
+            const strip = document.getElementById('calendar-strip');
+            strip.innerHTML = '';
+            const today = new Date(); today.setHours(0,0,0,0);
+
+            for(let i = -7; i <= 30; i++) {
+                let d = new Date(); d.setDate(today.getDate() + i); d.setHours(0,0,0,0);
+                let active = d.getTime() === selectedDate.getTime();
+                let isToday = d.getTime() === today.getTime();
+                
+                let card = document.createElement('div');
+                card.className = `day-card flex flex-col items-center p-4 min-w-[65px] rounded-2xl glass cursor-pointer transition-all ${active ? 'active' : ''}`;
+                card.onclick = () => { selectedDate = new Date(d); generateCalendar(); renderTasks(); };
+                card.innerHTML = `
+                    <span class="text-[10px] uppercase font-bold opacity-60">${d.toLocaleDateString('cs', {weekday:'short'})}</span>
+                    <span class="text-xl font-black">${d.getDate()}</span>
+                    ${isToday && !active ? '<div class="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1"></div>' : ''}
+                `;
+                strip.appendChild(card);
+                if(active) card.scrollIntoView({behavior:'smooth', inline:'center'});
+            }
+            document.getElementById('month-display').innerText = selectedDate.toLocaleDateString('cs', {month:'long', year:'numeric'});
+        }
+
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            const key = selectedDate.toISOString().split('T')[0];
+            const tasks = allTasks[key] || [];
+            list.innerHTML = '';
+            
+            if (tasks.length === 0) {
+                list.innerHTML = `
+                    <div class="flex flex-col items-center justify-center opacity-30 mt-20 text-center">
+                        <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <p class="font-bold">Žádné plány pro tento den</p>
+                    </div>`;
+            }
+
+            tasks.forEach((t, i) => {
+                let li = document.createElement('li');
+                li.className = `glass p-5 rounded-[1.5rem] flex items-center gap-4 transition-all ${t.done ? 'opacity-40 grayscale' : ''}`;
+                li.innerHTML = `
+                    <div onclick="toggleTask(${i})" class="w-7 h-7 rounded-xl border-2 border-${t.cat}-500 flex items-center justify-center cursor-pointer transition-colors ${t.done ? 'bg-'+t.cat+'-500' : ''}">
+                        ${t.done ? '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M5 13l4 4L19 7"></path></svg>' : ''}
+                    </div>
+                    <div class="flex-grow">
+                        <p class="${t.done ? 'line-through opacity-70' : 'font-bold text-lg'}">${t.text}</p>
+                        <span class="text-[10px] opacity-60 uppercase font-black tracking-widest">${t.time || 'Plánováno'} • ${t.cat}</span>
+                    </div>
+                    <button onclick="deleteTask(${i})" class="p-2 opacity-30 hover:opacity-100 transition-opacity">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                `;
+                list.appendChild(li);
+            });
+            updateStatsUI();
+        }
+
+        function addTask() {
+            const input = document.getElementById('task-input');
+            const time = document.getElementById('task-time');
+            if(!input.value.trim()) return;
+            const key = selectedDate.toISOString().split('T')[0];
+            if(!allTasks[key]) allTasks[key] = [];
+            allTasks[key].push({ text: input.value, cat: currentCat, time: time.value, done: false });
+            input.value = ''; save();
+        }
+
+        window.toggleTask = (i) => {
+            const key = selectedDate.toISOString().split('T')[0];
+            const task = allTasks[key][i];
+            task.done = !task.done;
+            if(task.done) {
+                userData.xp += 10;
+                checkStreak();
+            } else {
+                userData.xp = Math.max(0, userData.xp - 10);
+            }
+            save();
+        };
+
+        function checkStreak() {
+            const today = new Date().toISOString().split('T')[0];
+            if(userData.lastDone !== today) {
+                userData.streak++;
+                userData.lastDone = today;
+            }
+        }
+
+        function updateStatsUI() {
+            document.getElementById('xp-val').innerText = userData.xp;
+            document.getElementById('streak-val').innerText = userData.streak;
+            localStorage.setItem('user_stats', JSON.stringify(userData));
+        }
+
+        window.deleteTask = (i) => { 
+            const key = selectedDate.toISOString().split('T')[0];
+            allTasks[key].splice(i,1); 
+            if (allTasks[key].length === 0) delete allTasks[key];
+            save(); 
+        };
+
+        window.goToToday = () => { selectedDate = new Date(); selectedDate.setHours(0,0,0,0); generateCalendar(); renderTasks(); };
+        function save() { localStorage.setItem('tasks_v2', JSON.stringify(allTasks)); renderTasks(); }
+        
+        setCat('blue'); generateCalendar(); renderTasks();
+    </script>
+</body>
+</html>

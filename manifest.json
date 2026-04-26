@@ -1,0 +1,17 @@
+{
+  "name": "Plánovač ELITE PRO",
+  "short_name": "ElitePlan",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "description": "Profesionální denní plánovač s prvky hry a kalendářem.",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/906/906334.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
