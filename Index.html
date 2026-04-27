@@ -8,7 +8,6 @@
     <meta name="theme-color" content="#3b82f6">
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google AdMob Skript s Vaším ID APLIKACE -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6857383255513484" crossorigin="anonymous"></script>
 
     <style>
@@ -21,6 +20,10 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .active-cat { border-color: white !important; transform: scale(1.1); }
         .repeat-active { color: #10b981 !important; opacity: 1 !important; }
+        
+        /* FIX: Zajištění viditelnosti ikony času v tmavém i světlém režimu */
+        #task-time { color-scheme: dark; }
+        .light-mode #task-time { color-scheme: light; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -46,9 +49,7 @@
         <ul id="task-list" class="space-y-4"></ul>
     </main>
 
-    <!-- Panel pro přidávání úkolů a REKLAMA dole -->
     <div class="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)] to-transparent">
-        
         <div class="max-w-2xl mx-auto px-6 mb-4">
             <div class="glass p-5 rounded-[2.5rem] shadow-2xl border-t border-white/20">
                 <input type="text" id="task-input" placeholder="Přidat úkol..." class="bg-transparent w-full px-4 py-2 focus:outline-none text-lg">
@@ -58,13 +59,11 @@
                         <button onclick="setCat('blue')" class="w-8 h-8 rounded-full bg-blue-500 border-2 border-transparent transition-all" id="cat-blue"></button>
                         <button onclick="setCat('emerald')" class="w-8 h-8 rounded-full bg-emerald-500 border-2 border-transparent transition-all" id="cat-emerald"></button>
                         <button onclick="setCat('rose')" class="w-8 h-8 rounded-full bg-rose-500 border-2 border-transparent transition-all" id="cat-rose"></button>
-                        
-                        <!-- Tlačítko pro opakování -->
                         <button onclick="toggleRepeat()" id="repeat-btn" class="ml-2 opacity-30 transition-all text-xl" title="Opakovat denně">🔄</button>
                     </div>
                     
                     <div class="flex items-center gap-4">
-                        <input type="time" id="task-time" class="bg-transparent text-xs font-bold opacity-70 outline-none">
+                        <input type="time" id="task-time" class="bg-transparent text-sm font-bold outline-none cursor-pointer p-1">
                         <button onclick="addTask()" class="bg-blue-600 p-4 rounded-2xl shadow-xl shadow-blue-500/30">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"/></svg>
                         </button>
@@ -73,7 +72,6 @@
             </div>
         </div>
 
-        <!-- REKLAMNÍ BANNER ÚPLNĚ DOLE -->
         <div class="w-full bg-[var(--bg)] py-2 flex items-center justify-center border-t border-white/5">
             <div class="w-[320px] h-[50px] overflow-hidden">
                 <ins class="adsbygoogle"
@@ -90,9 +88,7 @@
     <script>
         if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW zaregistrován'))
-                    .catch(err => console.warn('SW registrace selhala:', err));
+                navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW error:', err));
             });
         }
 
@@ -166,15 +162,8 @@
             if(!input.value.trim()) return;
             const key = selectedDate.toISOString().split('T')[0];
             if(!allTasks[key]) allTasks[key] = [];
-            allTasks[key].push({ 
-                text: input.value, 
-                cat: currentCat, 
-                time: time.value, 
-                done: false,
-                repeat: isRepeating
-            });
+            allTasks[key].push({ text: input.value, cat: currentCat, time: time.value, done: false, repeat: isRepeating });
             input.value = '';
-            // Resetování opakování po přidání pro čistý start příště
             isRepeating = false;
             document.getElementById('repeat-btn').classList.remove('repeat-active');
             save();
@@ -184,27 +173,15 @@
             const key = selectedDate.toISOString().split('T')[0];
             const task = allTasks[key][i];
             task.done = !task.done;
-            
             if(task.done) { 
-                userData.xp += 10; 
-                checkStreak(); 
-                
-                // Logika opakování: pokud je úkol opakovací, vytvoř ho na zítřek
+                userData.xp += 10; checkStreak(); 
                 if(task.repeat) {
-                    const nextDay = new Date(selectedDate);
-                    nextDay.setDate(nextDay.getDate() + 1);
+                    const nextDay = new Date(selectedDate); nextDay.setDate(nextDay.getDate() + 1);
                     const nextKey = nextDay.toISOString().split('T')[0];
-                    
                     if(!allTasks[nextKey]) allTasks[nextKey] = [];
-                    // Kontrola, zda už tam stejný úkol není (aby se neduplikoval při překlikávání)
-                    const exists = allTasks[nextKey].some(st => st.text === task.text);
-                    if(!exists) {
-                        allTasks[nextKey].push({ ...task, done: false });
-                    }
+                    if(!allTasks[nextKey].some(st => st.text === task.text)) allTasks[nextKey].push({ ...task, done: false });
                 }
-            } else { 
-                userData.xp = Math.max(0, userData.xp - 10); 
-            }
+            } else { userData.xp = Math.max(0, userData.xp - 10); }
             save();
         };
 
@@ -223,18 +200,13 @@
 
         window.deleteTask = (i) => { 
             const k = selectedDate.toISOString().split('T')[0]; 
-            if(allTasks[k]) {
-                allTasks[k].splice(i,1); 
-                save(); 
-            }
+            if(allTasks[k]) { allTasks[k].splice(i,1); save(); }
         };
 
         window.goToToday = () => { selectedDate = new Date(); selectedDate.setHours(0,0,0,0); generateCalendar(); renderTasks(); };
         function save() { localStorage.setItem('tasks_v2', JSON.stringify(allTasks)); renderTasks(); }
         
-        document.addEventListener('DOMContentLoaded', () => {
-            setCat('blue'); generateCalendar(); renderTasks();
-        });
+        document.addEventListener('DOMContentLoaded', () => { setCat('blue'); generateCalendar(); renderTasks(); });
     </script>
 </body>
 </html>
